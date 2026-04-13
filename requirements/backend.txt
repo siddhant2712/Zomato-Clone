@@ -1,0 +1,8 @@
+bcryptjs
+cors
+dotenv
+express
+express-validator
+firebase-admin
+jsonwebtoken
+mongoose
