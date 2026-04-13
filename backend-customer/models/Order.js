@@ -4,6 +4,9 @@ const OrderSchema = new mongoose.Schema({
     customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     restaurantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Restaurant', required: true },
     deliveryId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    customerPhone: { type: String },
+    deliveryAddress: { type: String, required: true },
+    specialInstructions: { type: String, default: '' },
     items: [
         {
             menuId: { type: mongoose.Schema.Types.ObjectId, ref: 'Menu' },
@@ -15,11 +18,10 @@ const OrderSchema = new mongoose.Schema({
     totalAmount: { type: Number, required: true },
     status: { 
         type: String, 
-        enum: ['pending', 'accepted', 'preparing', 'ready', 'assigned', 'picked', 'delivered'], 
+        enum: ['pending', 'accepted', 'preparing', 'ready', 'assigned', 'picked', 'delivered', 'cancelled'], 
         default: 'pending' 
     },
     paymentMethod: { type: String, enum: ['cod', 'online'], default: 'cod' },
-    createdAt: { type: Date, default: Date.now }
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Order', OrderSchema);

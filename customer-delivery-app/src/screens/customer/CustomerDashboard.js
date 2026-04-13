@@ -1,25 +1,52 @@
-import React, { useContext, useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, ActivityIndicator, Dimensions, Platform, Animated } from 'react-native';
+import React, { useContext, useEffect, useState, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, TextInput, ActivityIndicator, Dimensions, Platform, Animated, Vibration, Alert } from 'react-native';
 import { AuthContext } from '../../context/AuthContext';
-import { Search, ShoppingCart, Menu as MenuIcon, MapPin, User, ChevronRight, Flame, Clock, Truck } from 'lucide-react-native';
+import { CartContext } from '../../context/CartContext';
+import { Search, ShoppingCart, MapPin, User, ChevronRight, Flame, Clock, Truck, ChevronDown, Star, CheckCircle, Package } from 'lucide-react-native';
 import axios from 'axios';
 import ENV from '../../config/env';
-
 import { SafeAreaView } from 'react-native-safe-area-context';
-const { width } = Dimensions.get('window');
 
+const { width } = Dimensions.get('window');
 const MIRCHI_RED = '#BC1010';
-const MIRCHI_GREEN = '#00B14F';
+const MIRCHI_GREEN = '#257E3E';
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1546113165-1ad943729fc3?w=400';
 
 export default function CustomerDashboard({ navigation }) {
-    const { logout, user, token } = useContext(AuthContext);
+    const { user, token, refreshProfile } = useContext(AuthContext);
+    const { addToCart, cartCount } = useContext(CartContext);
     const [menuItems, setMenuItems] = useState([]);
+    const [recommendedItems, setRecommendedItems] = useState([]);
     const [activeOrders, setActiveOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [statusUpdateAlert, setStatusUpdateAlert] = useState({ visible: false, status: '' });
+    const [cartToastVisible, setCartToastVisible] = useState(false);
+    const [search, setSearch] = useState('');
     
     const prevOrderStatus = useRef(null);
     const slideAnim = useRef(new Animated.Value(100)).current;
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+    const cartBounceAnim = useRef(new Animated.Value(1)).current;
+    const toastAnim = useRef(new Animated.Value(-100)).current;
+
+    useEffect(() => {
+        if (cartCount > 0) {
+            Animated.sequence([
+                Animated.timing(cartBounceAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
+                Animated.spring(cartBounceAnim, { toValue: 1, friction: 3, useNativeDriver: true }),
+            ]).start();
+        }
+    }, [cartCount]);
+
+    useEffect(() => {
+        if (activeOrders.length > 0) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, { toValue: 1.15, duration: 1200, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+                ])
+            ).start();
+        }
+    }, [activeOrders]);
 
     const triggerPopup = (newStatus) => {
         setStatusUpdateAlert({ visible: true, status: newStatus });
@@ -46,12 +73,15 @@ export default function CustomerDashboard({ navigation }) {
             ]);
             setMenuItems(menuRes.data);
             
+            if (menuRes.data.length > 0) {
+                setRecommendedItems(menuRes.data.slice(0, 5));
+            }
+
             const newActiveOrders = activeRes.data;
             setActiveOrders(newActiveOrders);
             const currentOrder = newActiveOrders[0];
 
             if (currentOrder && prevOrderStatus.current && currentOrder.status !== prevOrderStatus.current && !loading) {
-                // Status changed!
                 triggerPopup(currentOrder.status);
             }
             if (currentOrder) {
@@ -65,75 +95,100 @@ export default function CustomerDashboard({ navigation }) {
     };
 
     useEffect(() => {
+        refreshProfile();
         fetchData();
-        const timer = setInterval(fetchData, 8000); // Polling every 8s
+        const timer = setInterval(fetchData, 8000);
         return () => clearInterval(timer);
     }, []);
 
-    const activeOrder = activeOrders[0]; // Show the most recent active order
+    const handleQuickAdd = (item) => {
+        Vibration.vibrate(50);
+        const result = addToCart(item);
+        if (result?.success === false) {
+            Alert.alert('Selection Issue', result.msg);
+        } else {
+            // Show toast
+            setCartToastVisible(true);
+            Animated.sequence([
+                Animated.timing(toastAnim, { toValue: 20, duration: 400, useNativeDriver: true }),
+                Animated.delay(1500),
+                Animated.timing(toastAnim, { toValue: -100, duration: 400, useNativeDriver: true }),
+            ]).start(() => setCartToastVisible(false));
+        }
+    };
+
+    const filteredItems = useMemo(() => {
+        const query = search.trim().toLowerCase();
+        return menuItems.filter(item => 
+            !query || 
+            item.name?.toLowerCase().includes(query) || 
+            item.category?.toLowerCase().includes(query)
+        );
+    }, [menuItems, search]);
+
+    const activeOrder = activeOrders[0];
 
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-                    <User size={24} color="#fff" />
-                </TouchableOpacity>
-                <View style={styles.headerTitleContainer}>
-                    <Flame color="#fff" size={20} fill="#fff" />
-                    <View>
-                        <Text style={styles.headerText}>Mirchi</Text>
-                        <Text style={styles.headerSubtext}>Pure Veg Delights</Text>
-                    </View>
-                </View>
-                <TouchableOpacity onPress={() => navigation.navigate('Cart')}>
-                    <ShoppingCart size={24} color="#fff" />
-                </TouchableOpacity>
-            </View>
-
-            {/* Active Order Banner */}
-            {activeOrder && (
-                <TouchableOpacity 
-                    style={styles.activeOrderBanner}
-                    onPress={() => navigation.navigate('OrderDetails', { order: activeOrder })}
-                >
-                    <View style={styles.activeOrderLeft}>
-                        {['picked', 'delivered'].includes(activeOrder.status) ? (
-                            <Truck color="#fff" size={20} />
-                        ) : activeOrder.status === 'ready' ? (
-                            <Package color="#fff" size={20} />
-                        ) : (
-                            <Clock color="#fff" size={20} />
-                        )}
-                        <View style={styles.activeOrderTextContainer}>
-                            <Text style={styles.activeOrderTitle}>
-                                {activeOrder.status === 'picked' ? 'Your Mirchi meal is on the way!' : 
-                                 activeOrder.status === 'assigned' ? 'Rider is picking up your food.' :
-                                 activeOrder.status === 'ready' ? 'Your food is ready & waiting.' :
-                                 'Preparing your meal...'}
-                            </Text>
-                            <Text style={styles.activeOrderSub}>Order Status: {activeOrder.status.replace(/_/g, ' ').toUpperCase()}</Text>
-                        </View>
-                    </View>
-                    <ChevronRight color="#fff" size={20} />
-                </TouchableOpacity>
+            {/* Cart Success Toast */}
+            {cartToastVisible && (
+                <Animated.View style={[styles.cartToast, { transform: [{ translateY: toastAnim }] }]}>
+                    <CheckCircle size={16} color="#fff" />
+                    <Text style={styles.cartToastText}>Item added to cart</Text>
+                </Animated.View>
             )}
 
+            {/* Premium Header */}
+            <View style={styles.header}>
+                <View style={styles.headerLeft}>
+                    <TouchableOpacity style={styles.locationDropdown}>
+                        <MapPin size={18} color={MIRCHI_RED} />
+                        <Text style={styles.locationActiveText} numberOfLines={1}>
+                            {user?.location?.address || 'Add your address'}
+                        </Text>
+                        <ChevronDown size={14} color="#666" />
+                    </TouchableOpacity>
+                    <Text style={styles.greetingText}>
+                        {new Date().getHours() < 12 ? 'Good Morning' : 'Good Evening'}, {user?.name?.split(' ')[0] || 'Gourmet'} 👋
+                    </Text>
+                </View>
+
+                <View style={styles.headerRight}>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Cart')}>
+                        <Animated.View style={{ transform: [{ scale: cartBounceAnim }] }}>
+                            <ShoppingCart size={22} color="#333" fill={cartCount > 0 ? "#333" : "none"} />
+                        </Animated.View>
+                        {cartCount > 0 && <View style={styles.navBadge}><Text style={styles.navBadgeText}>{cartCount}</Text></View>}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Profile')}>
+                        <User size={22} color="#333" />
+                    </TouchableOpacity>
+                </View>
+            </View>
+
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {/* User Welcome Block */}
-                <View style={styles.welcomeBlock}>
-                    <View style={styles.welcomeInfo}>
-                        <Text style={styles.welcomeTitle}>Hello, {user?.name?.split(' ')[0] || 'Gourmet'}!</Text>
-                        <View style={styles.locationRow}>
-                            <MapPin size={14} color={MIRCHI_RED} />
-                            <Text style={styles.locationText}>Deliver to: Mirchi Lane, Mumbai</Text>
-                        </View>
-                    </View>
+                {/* Search Bar */}
+                <View style={styles.searchBar}>
+                    <Search color="#999" size={18} />
+                    <TextInput 
+                        placeholder="Search for 'Butter Paneer'..." 
+                        value={search}
+                        onChangeText={setSearch}
+                        style={styles.searchInput}
+                        placeholderTextColor="#999"
+                    />
                 </View>
 
                 {/* Categories */}
-                <Text style={[styles.sectionHeader, { marginTop: 20 }]}>What are you craving?</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoriesSection}>
+                <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitleMain}>What are you craving?</Text>
+                </View>
+                <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false} 
+                    contentContainerStyle={styles.categoriesSection}
+                    snapToInterval={width * 0.22 + 10}
+                    decelerationRate="fast"
+                >
                     {[
                         { name: 'Starters', image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?w=200' },
                         { name: 'Main Course', image: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=200' },
@@ -142,72 +197,152 @@ export default function CustomerDashboard({ navigation }) {
                     ].map((cat, index) => (
                         <TouchableOpacity 
                             key={index} 
-                            style={styles.categoryItem}
+                            style={styles.categoryCard}
                             onPress={() => navigation.navigate('MenuScreen', { category: cat.name })}
                         >
-                            <View style={styles.categoryCircle}>
-                                <Image source={{ uri: cat.image }} style={styles.categoryImage} />
-                            </View>
-                            <Text style={styles.categoryName}>{cat.name}</Text>
+                            <Image source={{ uri: cat.image }} style={styles.categoryImg} />
+                            <Text style={styles.categoryLabel}>{cat.name}</Text>
                         </TouchableOpacity>
                     ))}
                 </ScrollView>
 
-                {/* Popular Items */}
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Popular Items</Text>
-                    <TouchableOpacity style={styles.moreButton}>
-                        <Text style={styles.moreText}>More</Text>
-                        <ChevronRight size={16} color="#666" />
-                    </TouchableOpacity>
+                {/* Recommended Section */}
+                {recommendedItems.length > 0 && (
+                    <View style={styles.promoSection}>
+                        <View style={styles.sectionHeaderRow}>
+                            <Text style={styles.sectionTitleMain}>Recommended for you</Text>
+                            <TouchableOpacity><Text style={styles.seeAllText}>See all</Text></TouchableOpacity>
+                        </View>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalItemsScroll}>
+                            {recommendedItems.map((item) => (
+                                <TouchableOpacity 
+                                    key={`rec-${item._id}`} 
+                                    style={styles.recommendationCard}
+                                    onPress={() => handleQuickAdd(item)}
+                                >
+                                    <Image source={{ uri: item.image || FALLBACK_IMAGE }} style={styles.recImage} />
+                                    <View style={styles.recBadge}><Star size={8} color="#fff" fill="#fff" /><Text style={styles.recBadgeText}>4.8</Text></View>
+                                    <Text style={styles.recName} numberOfLines={1}>{item.name}</Text>
+                                    <View style={styles.recMetaRow}>
+                                        <Clock size={10} color="#888" />
+                                        <Text style={styles.recTime}>15-20 min</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+                )}
+
+                {/* Popular Grid */}
+                <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitleMain}>Popular Items</Text>
                 </View>
 
                 {loading ? (
-                    <ActivityIndicator size="large" color={MIRCHI_RED} />
+                    <View style={styles.skeletonContainer}>
+                        <ActivityIndicator size="large" color={MIRCHI_RED} />
+                    </View>
                 ) : (
-                    <View style={styles.popularGrid}>
-                        {menuItems.map((item) => (
-                            <TouchableOpacity key={item._id} style={styles.popularCard}>
-                                <Image 
-                                    source={{ uri: item.image || 'https://images.unsplash.com/photo-1546113165-1ad943729fc3?w=400' }} 
-                                    style={styles.popularImage} 
-                                />
-                                <View style={styles.cardInfo}>
-                                    <Text style={styles.popularName}>{item.name}</Text>
-                                    <View style={styles.vegBadge}>
-                                        <Text style={styles.vegText}>VEG</Text>
+                    <View style={styles.popularItemsGrid}>
+                        {filteredItems.map((item) => (
+                            <View key={item._id} style={styles.premiumFoodCard}>
+                                <TouchableOpacity activeOpacity={0.9} style={styles.cardTouchArea}>
+                                    <Image 
+                                        source={{ uri: item.image || FALLBACK_IMAGE }} 
+                                        style={styles.foodCardImage} 
+                                    />
+                                    <View style={styles.ratingTag}>
+                                        <Star size={10} color="#fff" fill="#fff" />
+                                        <Text style={styles.ratingText}>4.5</Text>
                                     </View>
-                                    <Text style={styles.popularPrice}>₹{item.price}</Text>
+                                </TouchableOpacity>
+                                
+                                <View style={styles.foodCardBody}>
+                                    <View style={styles.foodMainInfo}>
+                                        <Text style={styles.foodName} numberOfLines={1}>{item.name}</Text>
+                                        <Text style={styles.foodMeta}>PURE VEG • 20 MIN</Text>
+                                    </View>
+                                    
+                                    <View style={styles.foodActionRow}>
+                                        <Text style={styles.foodPrice}>Rs. {item.price}</Text>
+                                        <TouchableOpacity 
+                                            style={styles.pillAddBtn}
+                                            onPress={() => handleQuickAdd(item)}
+                                        >
+                                            <Text style={styles.pillAddText}>ADD +</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
-                            </TouchableOpacity>
+                            </View>
                         ))}
                     </View>
                 )}
                 
-                <View style={{ height: 100 }} />
+                <View style={{ height: 120 }} />
             </ScrollView>
 
-            {/* Bottom Tab Simulation */}
             <View style={styles.tabBar}>
                 <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('CustomerMain')}>
-                    <Flame size={20} color={MIRCHI_RED} />
-                    <Text style={[styles.tabText, { color: MIRCHI_RED }]}>Home</Text>
+                    <Flame size={22} color={MIRCHI_RED} fill={MIRCHI_RED} />
+                    <Text style={[styles.tabText, { color: MIRCHI_RED, fontWeight: '900' }]}>Home</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Orders')}>
-                    <Clock size={20} color="#666" />
+                    <Clock size={22} color="#666" />
                     <Text style={styles.tabText}>Orders</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Cart')}>
-                    <ShoppingCart size={20} color="#666" />
+                    <ShoppingCart size={22} color="#666" fill={cartCount > 0 ? "#666" : "none"} />
                     <Text style={styles.tabText}>Cart</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Profile')}>
-                    <User size={20} color="#666" />
+                    <User size={22} color="#666" />
                     <Text style={styles.tabText}>Profile</Text>
                 </TouchableOpacity>
             </View>
 
-            {/* Bottom Floating Status Update Alert */}
+            {/* Floating Order Tracker */}
+            {activeOrder && (
+                <Animated.View style={styles.floatingTrackerContainer}>
+                    <TouchableOpacity 
+                        style={styles.floatingTrackerCard}
+                        onPress={() => navigation.navigate('OrderDetails', { order: activeOrder })}
+                        activeOpacity={0.9}
+                    >
+                        <View style={styles.trackerRow}>
+                            <Animated.View style={[styles.statusIconCircle, { transform: [{ scale: pulseAnim }] }]}>
+                                {['picked', 'delivered'].includes(activeOrder.status) ? (
+                                    <Truck color="#fff" size={20} />
+                                ) : activeOrder.status === 'ready' ? (
+                                    <Package color="#fff" size={20} />
+                                ) : (
+                                    <Clock color="#fff" size={20} />
+                                )}
+                            </Animated.View>
+                            <View style={styles.trackerTextInfo}>
+                                <Text style={styles.trackerStatusTitle}>
+                                    {activeOrder.status === 'preparing' ? 'Preparing your meal' :
+                                     activeOrder.status === 'ready' ? 'Ready for Pickup' :
+                                     activeOrder.status === 'picked' ? 'Out for Delivery' : 'Order Received'}
+                                </Text>
+                                <Text style={styles.trackerArrivalText}>Estimated arrival: 25-30 mins</Text>
+                            </View>
+                            <ChevronRight color={MIRCHI_RED} size={20} />
+                        </View>
+                        <View style={styles.progressContainer}>
+                            <View style={styles.progressBaseBar}>
+                                <View style={[styles.progressFillBar, { 
+                                    width: activeOrder.status === 'pending' ? '15%' :
+                                           activeOrder.status === 'accepted' ? '30%' :
+                                           activeOrder.status === 'preparing' ? '60%' :
+                                           activeOrder.status === 'ready' ? '85%' : '100%'
+                                }]} />
+                            </View>
+                        </View>
+                    </TouchableOpacity>
+                </Animated.View>
+            )}
+
+            {/* Status Update Alert */}
             {statusUpdateAlert.visible && (
                 <Animated.View style={[styles.statusUpdatePopup, { transform: [{ translateY: slideAnim }] }]}>
                     <TouchableOpacity 
@@ -215,7 +350,7 @@ export default function CustomerDashboard({ navigation }) {
                         onPress={() => navigation.navigate('OrderDetails', { order: activeOrder })}
                     >
                         <View style={styles.popupIconCircle}>
-                            {statusUpdateAlert.status === 'out_for_delivery' ? (
+                            {statusUpdateAlert.status === 'picked' ? (
                                 <Truck color="#fff" size={24} />
                             ) : statusUpdateAlert.status === 'delivered' ? (
                                 <CheckCircle color="#fff" size={24} />
@@ -226,11 +361,9 @@ export default function CustomerDashboard({ navigation }) {
                         <View style={styles.popupTextContainer}>
                             <Text style={styles.popupTitle}>Order Update!</Text>
                             <Text style={styles.popupSub}>
-                                {statusUpdateAlert.status === 'out_for_delivery' 
-                                    ? 'Your meal is out for delivery!' 
-                                    : statusUpdateAlert.status === 'preparing'
-                                    ? 'Restaurant is preparing your food.'
-                                    : 'Your order was delivered.'}
+                                {statusUpdateAlert.status === 'picked' ? 'Your meal is out for delivery!' :
+                                 statusUpdateAlert.status === 'preparing' ? 'Restaurant is preparing your food.' :
+                                 statusUpdateAlert.status === 'delivered' ? 'Your order was delivered.' : 'Status updated.'}
                             </Text>
                         </View>
                         <ChevronRight color="#888" size={20} style={{ marginLeft: 'auto' }} />
@@ -242,256 +375,112 @@ export default function CustomerDashboard({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#FCFCFC',
-    },
+    container: { flex: 1, backgroundColor: '#F8F9FA' },
     header: {
-        backgroundColor: MIRCHI_RED,
+        backgroundColor: '#fff',
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingBottom: 20,
+        paddingBottom: 15,
         paddingTop: Platform.OS === 'ios' ? 10 : 40,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
     },
-    headerTitleContainer: {
-        alignItems: 'center',
-    },
-    headerText: {
-        color: '#fff',
-        fontSize: 22,
-        fontWeight: '900',
-        letterSpacing: 1,
-    },
-    headerSubtext: {
-        color: '#FFDE6D',
-        fontSize: 10,
-        fontWeight: '700',
-        textTransform: 'uppercase',
-    },
-    scrollContent: {
-        paddingTop: 15,
-    },
-    welcomeBlock: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        marginBottom: 20,
-    },
-    welcomeInfo: {
-        flex: 1,
-    },
-    welcomeTitle: {
-        fontSize: 28,
-        fontWeight: '900',
-        color: '#1A1A1A',
-    },
-    locationRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 4,
-    },
-    locationText: {
-        fontSize: 13,
-        color: '#666',
-        fontWeight: '500',
-    },
-    heroImage: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        borderWidth: 3,
-        borderColor: '#eee',
-    },
+    headerLeft: { flex: 1 },
+    locationDropdown: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+    locationActiveText: { fontSize: 14, fontWeight: '900', color: '#1A1A1A', marginHorizontal: 4, maxWidth: width * 0.4 },
+    greetingText: { fontSize: 12, color: '#666', fontWeight: '600' },
+    headerRight: { flexDirection: 'row', alignItems: 'center' },
+    iconBtn: { marginLeft: 18, position: 'relative' },
+    navBadge: { position: 'absolute', top: -6, right: -6, backgroundColor: MIRCHI_RED, width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+    navBadgeText: { color: '#fff', fontSize: 10, fontWeight: '900' },
+    scrollContent: { paddingBottom: 20 },
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F5F5F5',
-        marginHorizontal: 20,
-        paddingHorizontal: 15,
-        height: 50,
-        borderRadius: 15,
-        marginBottom: 24,
-        borderWidth: 1,
-        borderColor: '#EEE',
-    },
-    searchInput: {
-        flex: 1,
-        marginLeft: 10,
-        fontSize: 15,
-    },
-    categoriesSection: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        paddingHorizontal: 10,
-        marginBottom: 30,
-    },
-    categoryItem: {
-        alignItems: 'center',
-    },
-    categoryCircle: {
-        width: 65,
-        height: 65,
-        borderRadius: 33,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: '#EEE',
         backgroundColor: '#fff',
+        marginHorizontal: 15,
+        marginTop: 20,
+        paddingHorizontal: 15,
+        height: 52,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#EAEAEA',
+        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2,
+    },
+    searchInput: { flex: 1, marginLeft: 12, fontSize: 15, color: '#333' },
+    sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 30, marginBottom: 15 },
+    sectionTitleMain: { fontSize: 22, fontWeight: '900', color: '#111', letterSpacing: -0.5 },
+    seeAllText: { color: MIRCHI_RED, fontWeight: '800', fontSize: 13 },
+    categoriesSection: { paddingLeft: 15, paddingBottom: 10 },
+    categoryCard: { width: width * 0.22, alignItems: 'center', marginRight: 10 },
+    categoryImg: { width: width * 0.18, height: width * 0.18, borderRadius: width * 0.09, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F0F0F0' },
+    categoryLabel: { marginTop: 10, fontSize: 11, fontWeight: '800', color: '#333', textAlign: 'center' },
+    promoSection: { marginTop: 10 },
+    horizontalItemsScroll: { paddingLeft: 20, paddingBottom: 10 },
+    recommendationCard: { width: 140, marginRight: 15 },
+    recImage: { width: 140, height: 140, borderRadius: 16, backgroundColor: '#eee' },
+    recBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: '#257E3E', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 6 },
+    recBadgeText: { color: '#fff', fontSize: 10, fontWeight: '900', marginLeft: 3 },
+    recName: { fontSize: 15, fontWeight: '800', color: '#1A1A1A', marginTop: 8 },
+    recMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    recTime: { fontSize: 11, color: '#888', fontWeight: '600', marginLeft: 4 },
+    popularItemsGrid: { paddingHorizontal: 15 },
+    premiumFoodCard: { backgroundColor: '#fff', borderRadius: 20, marginBottom: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.08, shadowRadius: 20, elevation: 4, overflow: 'hidden' },
+    cardTouchArea: { position: 'relative' },
+    foodCardImage: { width: '100%', height: 200 },
+    ratingTag: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.6)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+    ratingText: { color: '#fff', fontSize: 12, fontWeight: '900', marginLeft: 4 },
+    foodCardBody: { padding: 15 },
+    foodMainInfo: { marginBottom: 10 },
+    foodName: { fontSize: 20, fontWeight: '900', color: '#1A1A1A' },
+    foodMeta: { fontSize: 12, color: '#888', fontWeight: '700', marginTop: 4 },
+    foodActionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 5 },
+    foodPrice: { fontSize: 22, fontWeight: '900', color: '#111' },
+    pillAddBtn: { backgroundColor: MIRCHI_RED, paddingHorizontal: 25, paddingVertical: 10, borderRadius: 12, shadowColor: MIRCHI_RED, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
+    pillAddText: { color: '#fff', fontSize: 14, fontWeight: '900' },
+    tabBar: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: '#fff', flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingBottom: 20, paddingHorizontal: 10 },
+    tabItem: { alignItems: 'center', width: width * 0.2 },
+    tabText: { fontSize: 11, color: '#888', fontWeight: '700', marginTop: 4 },
+    floatingTrackerContainer: { position: 'absolute', bottom: 95, left: 15, right: 15, zIndex: 100 },
+    floatingTrackerCard: { backgroundColor: 'rgba(255, 255, 255, 0.98)', borderRadius: 20, padding: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 15, borderWidth: 1, borderColor: '#EAEAEA' },
+    trackerRow: { flexDirection: 'row', alignItems: 'center' },
+    statusIconCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: MIRCHI_RED, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+    trackerStatusTitle: { fontSize: 17, fontWeight: '900', color: '#1A1A1A' },
+    trackerArrivalText: { fontSize: 12, color: '#666', marginTop: 2, fontWeight: '600' },
+    progressContainer: { marginTop: 15 },
+    progressBaseBar: { height: 8, backgroundColor: '#F0F0F0', borderRadius: 4, overflow: 'hidden' },
+    progressFillBar: { height: '100%', backgroundColor: MIRCHI_GREEN, borderRadius: 4 },
+    statusUpdatePopup: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: '#fff', borderRadius: 16, padding: 15, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.15, shadowRadius: 10, elevation: 10, borderWidth: 1, borderColor: '#EEE' },
+    popupContent: { flexDirection: 'row', alignItems: 'center' },
+    popupIconCircle: { width: 45, height: 45, borderRadius: 25, backgroundColor: MIRCHI_GREEN, justifyContent: 'center', alignItems: 'center' },
+    popupTextContainer: { marginLeft: 15 },
+    popupTitle: { color: '#111', fontSize: 16, fontWeight: '800' },
+    popupSub: { color: '#666', fontSize: 12, marginTop: 2 },
+    skeletonContainer: { paddingVertical: 50, alignItems: 'center' },
+    cartToast: {
+        position: 'absolute',
+        top: 60,
+        left: '20%',
+        right: '20%',
+        backgroundColor: '#257E3E',
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 5,
-    },
-    categoryImage: {
-        width: '100%',
-        height: '100%',
+        paddingVertical: 10,
         borderRadius: 25,
-    },
-    categoryName: {
-        marginTop: 8,
-        fontSize: 11,
-        color: '#333',
-        fontWeight: '700',
-    },
-    sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        marginBottom: 15,
-    },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: '900',
-        color: '#111',
-    },
-    moreButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    moreText: {
-        fontSize: 13,
-        color: '#666',
-        fontWeight: '600',
-    },
-    popularGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        paddingHorizontal: 15,
-        justifyContent: 'space-between',
-    },
-    popularCard: {
-        width: '48%',
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        marginBottom: 20,
+        zIndex: 1000,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.05,
-        shadowRadius: 15,
-        elevation: 3,
-        borderWidth: 1,
-        borderColor: '#F0F0F0',
-    },
-    popularImage: {
-        width: '100%',
-        height: 120,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-    },
-    cardInfo: {
-        padding: 12,
-    },
-    popularName: {
-        fontSize: 15,
-        fontWeight: '800',
-        color: '#111',
-    },
-    vegBadge: {
-        borderWidth: 1,
-        borderColor: MIRCHI_GREEN,
-        paddingHorizontal: 4,
-        paddingVertical: 1,
-        width: 32,
-        alignItems: 'center',
-        marginTop: 4,
-        marginBottom: 6,
-    },
-    vegText: {
-        fontSize: 8,
-        color: MIRCHI_GREEN,
-        fontWeight: '900',
-    },
-    popularPrice: {
-        fontSize: 16,
-        fontWeight: '900',
-        color: '#333',
-    },
-    tabBar: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 70,
-        backgroundColor: '#fff',
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        borderTopWidth: 1,
-        borderTopColor: '#EEE',
-        paddingBottom: 15,
-    },
-    tabItem: {
-        alignItems: 'center',
-    },
-    tabText: {
-        fontSize: 10,
-        color: '#666',
-        fontWeight: '700',
-        marginTop: 4,
-    },
-    statusUpdatePopup: {
-        position: 'absolute',
-        bottom: 80, // Above tab bar
-        left: 20,
-        right: 20,
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 15,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 5 },
-        shadowOpacity: 0.15,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
         shadowRadius: 10,
         elevation: 10,
-        borderWidth: 1,
-        borderColor: '#EEE',
     },
-    popupContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    popupIconCircle: {
-        width: 45,
-        height: 45,
-        borderRadius: 25,
-        backgroundColor: MIRCHI_GREEN,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    popupTextContainer: {
-        marginLeft: 15,
-    },
-    popupTitle: {
-        color: '#111',
-        fontSize: 16,
+    cartToastText: {
+        color: '#fff',
+        fontSize: 14,
         fontWeight: '800',
-    },
-    popupSub: {
-        color: '#666',
-        fontSize: 12,
-        marginTop: 2,
+        marginLeft: 8,
     }
 });
