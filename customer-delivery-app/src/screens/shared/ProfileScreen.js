@@ -61,6 +61,18 @@ export default function ProfileScreen({ navigation }) {
                     </View>
                 </View>
 
+                {/* Order Management */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>My Activity</Text>
+                    <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Orders')}>
+                        <View style={[styles.menuIcon, { backgroundColor: '#E3F2FD' }]}>
+                            <Package size={20} color="#1565C0" />
+                        </View>
+                        <Text style={styles.menuText}>Track My Orders</Text>
+                        <ChevronRight size={20} color="#CCC" />
+                    </TouchableOpacity>
+                </View>
+
                 {/* Account Settings */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Account</Text>
@@ -71,45 +83,6 @@ export default function ProfileScreen({ navigation }) {
                         <Text style={styles.menuText}>Logout</Text>
                         <ChevronRight size={20} color="#CCC" />
                     </TouchableOpacity>
-                </View>
-
-                {/* Order History */}
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Order History</Text>
-                        <Clock size={18} color="#666" />
-                    </View>
-                    
-                    {loading ? (
-                        <ActivityIndicator color={MIRCHI_RED} style={{ margin: 20 }} />
-                    ) : history.length === 0 ? (
-                        <View style={styles.emptyHistory}>
-                            <Package size={40} color="#ddd" />
-                            <Text style={styles.emptyHistoryText}>No past orders yet</Text>
-                        </View>
-                    ) : (
-                        history.map((order) => (
-                            <TouchableOpacity 
-                                key={order._id} 
-                                style={styles.historyCard}
-                                onPress={() => navigation.navigate('OrderDetails', { order })}
-                            >
-                                <View style={styles.historyLeft}>
-                                    <View style={styles.historyIcon}>
-                                        <Package size={20} color={MIRCHI_RED} />
-                                    </View>
-                                    <View>
-                                        <Text style={styles.historyRestaurant}>{order.restaurantId?.name || 'Mirchi Restaurant'}</Text>
-                                        <Text style={styles.historyDate}>{new Date(order.createdAt).toLocaleDateString()}</Text>
-                                    </View>
-                                </View>
-                                <View style={styles.historyRight}>
-                                    <Text style={styles.historyAmount}>₹{order.totalAmount}</Text>
-                                    <ChevronRight size={16} color="#BBB" />
-                                </View>
-                            </TouchableOpacity>
-                        ))
-                    )}
                 </View>
             </ScrollView>
         </SafeAreaView>
