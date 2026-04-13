@@ -40,11 +40,10 @@ const OrderSchema = new mongoose.Schema({
     timestamps: true
 });
 
-OrderSchema.pre('validate', function(next) {
+OrderSchema.pre('validate', function() {
     if (!this.orderId) {
         this.orderId = generateOrderId();
     }
-    next();
 });
 
 module.exports = mongoose.model('Order', OrderSchema);
