@@ -1,168 +1,180 @@
 const express = require('express');
 const router = express.Router();
 const Order = require('../models/Order');
-const Restaurant = require('../models/Restaurant');
 const auth = require('../middleware/auth');
 
+const PAYMENT_STATUSES = ['pending', 'paid', 'failed'];
+const ORDER_STATUSES = ['pending', 'accepted', 'preparing', 'picked', 'delivered'];
+const NEXT_ORDER_STATUS = {
+    pending: 'accepted',
+    accepted: 'preparing',
+    preparing: 'picked',
+    picked: 'delivered',
+    delivered: null
+};
+
+// @route   POST api/orders
+// @desc    Create a new order
+router.post('/', auth, async (req, res) => {
+    const {
+        items,
+        totalPrice,
+        address,
+        paymentStatus = 'pending',
+        orderStatus = 'pending'
+    } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ msg: 'Items are required' });
+    }
+
+    if (typeof totalPrice !== 'number' || totalPrice < 0) {
+        return res.status(400).json({ msg: 'A valid total price is required' });
+    }
+
+    if (!address || typeof address !== 'string') {
+        return res.status(400).json({ msg: 'Address is required' });
+    }
+
+    if (!PAYMENT_STATUSES.includes(paymentStatus)) {
+        return res.status(400).json({ msg: 'Invalid payment status' });
+    }
+
+    if (!ORDER_STATUSES.includes(orderStatus)) {
+        return res.status(400).json({ msg: 'Invalid order status' });
+    }
+
+    if (orderStatus !== 'pending') {
+        return res.status(400).json({ msg: 'New orders must start with pending status' });
+    }
+
+    const normalizedItems = items.map(item => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price
+    }));
+
+    const hasInvalidItem = normalizedItems.some(item =>
+        !item.name ||
+        typeof item.quantity !== 'number' ||
+        item.quantity < 1 ||
+        typeof item.price !== 'number' ||
+        item.price < 0
+    );
+
+    if (hasInvalidItem) {
+        return res.status(400).json({ msg: 'Each item must include a valid name, quantity, and price' });
+    }
+
+    try {
+        const order = await Order.create({
+            userId: req.user.id,
+            items: normalizedItems,
+            totalPrice,
+            address: address.trim(),
+            paymentStatus,
+            orderStatus
+        });
+
+        const populatedOrder = await Order.findById(order._id).populate('userId', 'name email role');
+        res.status(201).json(populatedOrder);
+    } catch (err) {
+        console.error('Create order error:', err.message);
+        res.status(500).json({ msg: 'Server error' });
+    }
+});
+
 // @route   GET api/orders
-// @desc    Get user orders (Filtered by role)
+// @desc    Get all orders for the logged-in user
 router.get('/', auth, async (req, res) => {
     try {
-        let orders;
-        if (req.user.role === 'customer') {
-            orders = await Order.find({ customerId: req.user.id }).populate('restaurantId', 'name');
-        } else if (req.user.role === 'restaurant') {
-            // Shared Admin Data: Fetch by managedRestaurantId
-            const user = await require('../models/User').findById(req.user.id);
-            if (!user.managedRestaurantId) return res.status(400).json({ msg: 'User not associated with a restaurant' });
-            orders = await Order.find({ restaurantId: user.managedRestaurantId }).populate('customerId', 'name');
-        } else if (req.user.role === 'delivery') {
-            orders = await Order.find({ status: 'preparing' }).populate('restaurantId', 'name location');
-        }
-        res.json(orders);
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
-});
-
-// @route   GET api/orders/active
-// @desc    Get active orders (Not delivered)
-router.get('/active', auth, async (req, res) => {
-    try {
-        let query = { status: { $ne: 'delivered' } };
-        
-        if (req.user.role === 'customer') {
-            query.customerId = req.user.id;
-        } else if (req.user.role === 'restaurant') {
-            const user = await require('../models/User').findById(req.user.id);
-            if (!user.managedRestaurantId) return res.status(400).json({ msg: 'User not associated with a restaurant' });
-            query.restaurantId = user.managedRestaurantId;
-        } else if (req.user.role === 'delivery') {
-            // Delivery boy sees orders ready for pickup OR orders they have already accepted/picked up
-            query = {
-                $or: [
-                    { status: 'ready' },
-                    { deliveryId: req.user.id, status: { $in: ['assigned', 'picked'] } }
-                ]
-            };
-        }
-
-        const orders = await Order.find(query)
-            .populate('restaurantId', 'name location')
-            .populate('customerId', 'name')
-            .sort({ createdAt: -1 });
-        res.json(orders);
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
-});
-
-// @route   GET api/orders/history
-// @desc    Get last 5 delivered orders
-router.get('/history', auth, async (req, res) => {
-    try {
-        let query = { status: 'delivered' };
-        if (req.user.role === 'customer') query.customerId = req.user.id;
-        else if (req.user.role === 'restaurant') query.restaurantId = req.user.id;
-        else if (req.user.role === 'delivery') query.deliveryId = req.user.id;
-
-        const orders = await Order.find(query)
-            .populate('restaurantId', 'name')
+        const orders = await Order.find({ userId: req.user.id })
             .sort({ createdAt: -1 })
-            .limit(5);
+            .populate('userId', 'name email role');
+
         res.json(orders);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
+        console.error('Fetch orders error:', err.message);
+        res.status(500).json({ msg: 'Server error' });
     }
 });
 
 // @route   GET api/orders/:id
-// @desc    Get order by ID
+// @desc    Get a single order owned by the logged-in user
 router.get('/:id', auth, async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id)
-            .populate('restaurantId', 'name location')
-            .populate('customerId', 'name location')
-            .populate('deliveryId', 'name phone');
-        
-        if (!order) return res.status(404).json({ msg: 'Order not found' });
-        
-        // Ensure user is authorized to view this order
-        if (req.user.role === 'customer' && order.customerId._id.toString() !== req.user.id) {
+        const order = await Order.findById(req.params.id).populate('userId', 'name email role');
+
+        if (!order) {
+            return res.status(404).json({ msg: 'Order not found' });
+        }
+
+        if (order.userId._id.toString() !== req.user.id) {
             return res.status(403).json({ msg: 'Unauthorized' });
         }
-        
+
         res.json(order);
     } catch (err) {
-        console.error(err.message);
-        if (err.kind === 'ObjectId') return res.status(404).json({ msg: 'Order not found' });
-        res.status(500).send('Server error');
+        console.error('Fetch order error:', err.message);
+        res.status(500).json({ msg: 'Server error' });
     }
 });
 
-// @route   PUT api/orders/:id
-// @desc    Update order status
-router.put('/:id', auth, async (req, res) => {
-    const { status, deliveryId } = req.body;
+// @route   PATCH api/orders/:id/status
+// @desc    Update payment status and advance order status for an owned order
+router.patch('/:id/status', auth, async (req, res) => {
+    const { paymentStatus, orderStatus } = req.body;
+
+    if (!paymentStatus && !orderStatus) {
+        return res.status(400).json({ msg: 'At least one status field is required' });
+    }
+
+    if (paymentStatus && !PAYMENT_STATUSES.includes(paymentStatus)) {
+        return res.status(400).json({ msg: 'Invalid payment status' });
+    }
+
+    if (orderStatus && !ORDER_STATUSES.includes(orderStatus)) {
+        return res.status(400).json({ msg: 'Invalid order status' });
+    }
 
     try {
-        let order = await Order.findById(req.params.id);
-        if (!order) return res.status(404).json({ msg: 'Order not found' });
+        const order = await Order.findById(req.params.id);
 
-        if (req.user.role === 'restaurant') {
-            if (order.restaurantId.toString() !== req.user.id) {
-                return res.status(403).json({ msg: 'Unauthorized' });
-            }
+        if (!order) {
+            return res.status(404).json({ msg: 'Order not found' });
+        }
 
-            // Restaurant transitions: pending -> accepted -> preparing -> ready
-            const allowedRestaurantStatuses = ['accepted', 'preparing', 'ready'];
-            if (!status || !allowedRestaurantStatuses.includes(status)) {
-                return res.status(400).json({ msg: 'Invalid restaurant status update' });
-            }
-
-            order.status = status;
-        } else if (req.user.role === 'delivery') {
-            // Delivery transitions: ready -> assigned -> picked -> delivered
-            if (status === 'assigned') {
-                if (order.status !== 'ready') {
-                    return res.status(400).json({ msg: 'Order must be ready before assignment' });
-                }
-                if (order.deliveryId) {
-                    return res.status(400).json({ msg: 'Order already assigned to another partner' });
-                }
-                order.deliveryId = req.user.id;
-                order.status = 'assigned';
-            } else if (status === 'picked') {
-                if (order.status !== 'assigned') {
-                    return res.status(400).json({ msg: 'Order must be assigned before pickup' });
-                }
-                if (order.deliveryId.toString() !== req.user.id) {
-                    return res.status(403).json({ msg: 'Unauthorized' });
-                }
-                order.status = 'picked';
-            } else if (status === 'delivered') {
-                if (order.status !== 'picked') {
-                    return res.status(400).json({ msg: 'Order must be picked up before delivery' });
-                }
-                if (order.deliveryId.toString() !== req.user.id) {
-                    return res.status(403).json({ msg: 'Unauthorized' });
-                }
-                order.status = 'delivered';
-            } else {
-                return res.status(400).json({ msg: 'Invalid delivery status update' });
-            }
-        } else {
+        if (order.userId.toString() !== req.user.id) {
             return res.status(403).json({ msg: 'Unauthorized' });
         }
 
+        if (paymentStatus) {
+            order.paymentStatus = paymentStatus;
+        }
+
+        if (orderStatus) {
+            const nextStatus = NEXT_ORDER_STATUS[order.orderStatus];
+
+            if (!nextStatus) {
+                return res.status(400).json({ msg: 'Order is already delivered and cannot be updated further' });
+            }
+
+            if (orderStatus !== nextStatus) {
+                return res.status(400).json({
+                    msg: `Invalid order status transition. Expected next status: ${nextStatus}`
+                });
+            }
+
+            order.orderStatus = orderStatus;
+        }
+
         await order.save();
-        res.json(order);
+
+        const populatedOrder = await Order.findById(order._id).populate('userId', 'name email role');
+        res.json(populatedOrder);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
+        console.error('Update order status error:', err.message);
+        res.status(500).json({ msg: 'Server error' });
     }
 });
 
