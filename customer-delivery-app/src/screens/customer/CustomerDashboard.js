@@ -18,6 +18,7 @@ export default function CustomerDashboard({ navigation }) {
     const [menuItems, setMenuItems] = useState([]);
     const [recommendedItems, setRecommendedItems] = useState([]);
     const [activeOrders, setActiveOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [statusUpdateAlert, setStatusUpdateAlert] = useState({ visible: false, status: '' });
     const [cartToastVisible, setCartToastVisible] = useState(false);
     const [search, setSearch] = useState('');
@@ -129,6 +130,7 @@ export default function CustomerDashboard({ navigation }) {
     const activeOrder = activeOrders[0];
 
     return (
+        <SafeAreaView style={styles.container}>
             {/* Cart Success Toast */}
             {cartToastVisible && (
                 <Animated.View style={[styles.cartToast, { transform: [{ translateY: toastAnim }] }]}>
@@ -176,66 +178,77 @@ export default function CustomerDashboard({ navigation }) {
                         style={styles.searchInput}
                         placeholderTextColor="#999"
                     />
-                </View>
-
-                {/* Categories */}
-                <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitleMain}>What are you craving?</Text>
-                </View>
-                <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false} 
-                    contentContainerStyle={styles.categoriesSection}
-                    snapToInterval={width * 0.22 + 10}
-                    decelerationRate="fast"
-                >
-                    {[
-                        { name: 'Starters', image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?w=200' },
-                        { name: 'Main Course', image: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=200' },
-                        { name: 'Combos', image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=200' },
-                        { name: 'Beverages', image: 'https://images.unsplash.com/photo-1544145945-f904253d0c7b?w=200' }
-                    ].map((cat, index) => (
-                        <TouchableOpacity 
-                            key={index} 
-                            style={styles.categoryCard}
-                            onPress={() => navigation.navigate('MenuScreen', { category: cat.name })}
-                        >
-                            <Image source={{ uri: cat.image }} style={styles.categoryImg} />
-                            <Text style={styles.categoryLabel}>{cat.name}</Text>
+                    {search.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearch('')}>
+                            <Text style={styles.clearSearchText}>✕</Text>
                         </TouchableOpacity>
-                    ))}
-                </ScrollView>
+                    )}
+                </View>
 
-                {/* Recommended Section */}
-                {recommendedItems.length > 0 && (
-                    <View style={styles.promoSection}>
+                {!search ? (
+                    <>
+                        {/* Categories */}
                         <View style={styles.sectionHeaderRow}>
-                            <Text style={styles.sectionTitleMain}>Recommended for you</Text>
-                            <TouchableOpacity><Text style={styles.seeAllText}>See all</Text></TouchableOpacity>
+                            <Text style={styles.sectionTitleMain}>What are you craving?</Text>
                         </View>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalItemsScroll}>
-                            {recommendedItems.map((item) => (
+                        <ScrollView 
+                            horizontal 
+                            showsHorizontalScrollIndicator={false} 
+                            contentContainerStyle={styles.categoriesSection}
+                            snapToInterval={width * 0.22 + 10}
+                            decelerationRate="fast"
+                        >
+                            {[
+                                { name: 'Starters', image: 'https://images.unsplash.com/photo-1541544741938-0af808871cc0?w=200' },
+                                { name: 'Main Course', image: 'https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=200' },
+                                { name: 'Combos', image: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=200' },
+                                { name: 'Beverages', image: 'https://images.unsplash.com/photo-1544145945-f904253d0c7b?w=200' }
+                            ].map((cat, index) => (
                                 <TouchableOpacity 
-                                    key={`rec-${item._id}`} 
-                                    style={styles.recommendationCard}
-                                    onPress={() => handleQuickAdd(item)}
+                                    key={index} 
+                                    style={styles.categoryCard}
+                                    onPress={() => navigation.navigate('MenuScreen', { category: cat.name })}
                                 >
-                                    <Image source={{ uri: item.image || FALLBACK_IMAGE }} style={styles.recImage} />
-                                    <View style={styles.recBadge}><Star size={8} color="#fff" fill="#fff" /><Text style={styles.recBadgeText}>4.8</Text></View>
-                                    <Text style={styles.recName} numberOfLines={1}>{item.name}</Text>
-                                    <View style={styles.recMetaRow}>
-                                        <Clock size={10} color="#888" />
-                                        <Text style={styles.recTime}>15-20 min</Text>
-                                    </View>
+                                    <Image source={{ uri: cat.image }} style={styles.categoryImg} />
+                                    <Text style={styles.categoryLabel}>{cat.name}</Text>
                                 </TouchableOpacity>
                             ))}
                         </ScrollView>
-                    </View>
-                )}
 
-                {/* Popular Grid */}
+                        {/* Recommended Section */}
+                        {recommendedItems.length > 0 && (
+                            <View style={styles.promoSection}>
+                                <View style={styles.sectionHeaderRow}>
+                                    <Text style={styles.sectionTitleMain}>Recommended for you</Text>
+                                    <TouchableOpacity><Text style={styles.seeAllText}>See all</Text></TouchableOpacity>
+                                </View>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalItemsScroll}>
+                                    {recommendedItems.map((item) => (
+                                        <TouchableOpacity 
+                                            key={`rec-${item._id}`} 
+                                            style={styles.recommendationCard}
+                                            onPress={() => handleQuickAdd(item)}
+                                        >
+                                            <Image source={{ uri: item.image || FALLBACK_IMAGE }} style={styles.recImage} />
+                                            <View style={styles.recBadge}><Star size={8} color="#fff" fill="#fff" /><Text style={styles.recBadgeText}>4.8</Text></View>
+                                            <Text style={styles.recName} numberOfLines={1}>{item.name}</Text>
+                                            <View style={styles.recMetaRow}>
+                                                <Clock size={10} color="#888" />
+                                                <Text style={styles.recTime}>15-20 min</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </>
+                ) : null}
+
+                {/* Popular Grid / Search Results */}
                 <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitleMain}>Popular Items</Text>
+                    <Text style={styles.sectionTitleMain}>
+                        {search ? `Results for "${search}"` : 'Popular Items'}
+                    </Text>
                 </View>
 
                 {loading ? (
@@ -410,6 +423,7 @@ const styles = StyleSheet.create({
         shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 2,
     },
     searchInput: { flex: 1, marginLeft: 12, fontSize: 15, color: '#333' },
+    clearSearchText: { fontSize: 18, color: '#999', paddingHorizontal: 5, fontWeight: '600' },
     sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 30, marginBottom: 15 },
     sectionTitleMain: { fontSize: 22, fontWeight: '900', color: '#111', letterSpacing: -0.5 },
     seeAllText: { color: MIRCHI_RED, fontWeight: '800', fontSize: 13 },
