@@ -13,6 +13,10 @@ router.get('/', async (req, res) => {
             query.restaurantId = req.query.restaurantId;
         }
 
+        if (req.query.category) {
+            query.category = { $regex: new RegExp(`^${req.query.category}$`, 'i') };
+        }
+
         if (req.query.availableOnly === 'true') {
             query.isAvailable = true;
         }
@@ -34,7 +38,7 @@ router.post('/', auth, async (req, res) => {
 
     try {
         const newItem = new Menu({
-            restaurantId: req.user.id,
+            restaurantId: req.user.managedRestaurantId || req.user.id,
             name,
             description,
             price,

@@ -32,7 +32,7 @@ export default function MenuScreen({ route, navigation }) {
             try {
                 const res = await axios.get(`${ENV.API_BASE}/api/menu`, {
                     headers: { 'x-auth-token': token },
-                    params: { availableOnly: true },
+                    params: { availableOnly: true, category: category },
                 });
                 setMenuItems(res.data);
             } catch (err) {
@@ -43,11 +43,7 @@ export default function MenuScreen({ route, navigation }) {
         };
 
         fetchMenu();
-    }, [token]);
-
-    const filteredItems = menuItems.filter(
-        (item) => item.category === category && item.isAvailable !== false
-    );
+    }, [token, category]);
 
     const getQuantity = (itemId) => {
         const item = cart.find((cartItem) => cartItem._id === itemId);
@@ -81,12 +77,12 @@ export default function MenuScreen({ route, navigation }) {
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {loading ? (
                     <ActivityIndicator color={MIRCHI_RED} size="large" style={styles.loader} />
-                ) : filteredItems.length === 0 ? (
+                ) : menuItems.length === 0 ? (
                     <View style={styles.emptyContainer}>
                         <Text style={styles.emptyText}>No dishes available in this category yet.</Text>
                     </View>
                 ) : (
-                    filteredItems.map((item) => (
+                    menuItems.map((item) => (
                         <View key={item._id} style={styles.itemCard}>
                             <Image
                                 source={{ uri: item.image || FALLBACK_IMAGE }}
