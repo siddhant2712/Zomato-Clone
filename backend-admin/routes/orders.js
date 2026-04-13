@@ -4,42 +4,6 @@ const Order = require('../models/Order');
 const Restaurant = require('../models/Restaurant');
 const auth = require('../middleware/auth');
 
-// @route   POST api/orders
-// @desc    Place an order (Customer only)
-router.post('/', auth, async (req, res) => {
-    if (req.user.role !== 'customer') return res.status(403).json({ msg: 'Unauthorized' });
-
-    const { restaurantId, items, totalAmount, paymentMethod } = req.body;
-
-    if (!restaurantId || !Array.isArray(items) || items.length === 0 || !totalAmount) {
-        return res.status(400).json({ msg: 'Invalid order payload' });
-    }
-
-    try {
-        // Enforce ONE active order constraint
-        const activeOrder = await Order.findOne({ 
-            customerId: req.user.id, 
-            status: { $nin: ['delivered', 'cancelled'] } 
-        });
-        if (activeOrder) {
-            return res.status(400).json({ msg: 'A customer can only order once at a time. Please wait for your active order to be delivered.' });
-        }
-        const newOrder = new Order({
-            customerId: req.user.id,
-            restaurantId,
-            items,
-            totalAmount,
-            paymentMethod
-        });
-
-        const order = await newOrder.save();
-        res.json(order);
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
-});
-
 // @route   GET api/orders
 // @desc    Get user orders (Filtered by role)
 router.get('/', auth, async (req, res) => {

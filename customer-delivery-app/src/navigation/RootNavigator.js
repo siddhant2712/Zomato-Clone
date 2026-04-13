@@ -10,6 +10,7 @@ import SignupScreen from '../screens/auth/SignupScreen';
 import CustomerDashboard from '../screens/customer/CustomerDashboard';
 import MenuScreen from '../screens/customer/MenuScreen';
 import CartScreen from '../screens/customer/CartScreen';
+import OrdersScreen from '../screens/customer/OrdersScreen';
 import DeliveryDashboard from '../screens/delivery/DeliveryDashboard';
 import ProfileScreen from '../screens/shared/ProfileScreen';
 import OrderDetailsScreen from '../screens/shared/OrderDetailsScreen';
@@ -47,6 +48,7 @@ export default function RootNavigator() {
                                 <Stack.Screen name="CustomerMain" component={CustomerDashboard} />
                                 <Stack.Screen name="MenuScreen" component={MenuScreen} />
                                 <Stack.Screen name="Cart" component={CartScreen} />
+                                <Stack.Screen name="Orders" component={OrdersScreen} />
                             </>
                         ) : (
                             <>

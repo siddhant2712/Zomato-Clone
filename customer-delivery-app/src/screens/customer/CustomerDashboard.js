@@ -189,10 +189,22 @@ export default function CustomerDashboard({ navigation }) {
 
             {/* Bottom Tab Simulation */}
             <View style={styles.tabBar}>
-                <TouchableOpacity style={styles.tabItem}><User size={20} color={MIRCHI_RED} /><Text style={[styles.tabText, { color: MIRCHI_RED }]}>Home</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.tabItem}><MapPin size={20} color="#666" /><Text style={styles.tabText}>Offers</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.tabItem}><ShoppingCart size={20} color="#666" /><Text style={styles.tabText}>Cart</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.tabItem}><User size={20} color="#666" /><Text style={styles.tabText}>Profile</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('CustomerMain')}>
+                    <Flame size={20} color={MIRCHI_RED} />
+                    <Text style={[styles.tabText, { color: MIRCHI_RED }]}>Home</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Orders')}>
+                    <Clock size={20} color="#666" />
+                    <Text style={styles.tabText}>Orders</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Cart')}>
+                    <ShoppingCart size={20} color="#666" />
+                    <Text style={styles.tabText}>Cart</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Profile')}>
+                    <User size={20} color="#666" />
+                    <Text style={styles.tabText}>Profile</Text>
+                </TouchableOpacity>
             </View>
 
             {/* Bottom Floating Status Update Alert */}
