@@ -14,13 +14,6 @@ export const CartProvider = ({ children }) => {
             };
         }
 
-        if (restaurantId && restaurantId !== item.restaurantId) {
-            return {
-                success: false,
-                msg: 'You can only order from one restaurant at a time.',
-            };
-        }
-
         setCart((prevCart) => {
             const existingItem = prevCart.find((i) => i._id === item._id);
             if (existingItem) {

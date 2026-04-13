@@ -32,6 +32,15 @@ export const AuthProvider = ({ children }) => {
         loadUser();
     }, []);
 
+    const persistSession = async (userData, userToken = token) => {
+        setUser(userData);
+        if (userToken) {
+            setToken(userToken);
+            await AsyncStorage.setItem('token', userToken);
+        }
+        await AsyncStorage.setItem('user', JSON.stringify(userData));
+    };
+
     const login = async (email, password) => {
         try {
             const res = await axios.post(`${API_BASE}/api/auth/login`, { email, password });
@@ -42,10 +51,7 @@ export const AuthProvider = ({ children }) => {
                 return { success: false, msg: 'Use the Restaurant App to log in as a Restaurant.' };
             }
 
-            setUser(userData);
-            setToken(userToken);
-            await AsyncStorage.setItem('user', JSON.stringify(userData));
-            await AsyncStorage.setItem('token', userToken);
+            await persistSession(userData, userToken);
             return { success: true };
         } catch (err) {
             return { success: false, msg: err.response?.data?.msg || 'Login failed' };
@@ -61,13 +67,42 @@ export const AuthProvider = ({ children }) => {
             const userData = res.data.user;
             const userToken = res.data.token;
 
-            setUser(userData);
-            setToken(userToken);
-            await AsyncStorage.setItem('user', JSON.stringify(userData));
-            await AsyncStorage.setItem('token', userToken);
+            await persistSession(userData, userToken);
             return { success: true };
         } catch (err) {
             return { success: false, msg: err.response?.data?.msg || 'Registration failed' };
+        }
+    };
+
+    const refreshProfile = async () => {
+        if (!token) {
+            return null;
+        }
+
+        try {
+            const res = await axios.get(`${API_BASE}/api/auth/me`, {
+                headers: { 'x-auth-token': token }
+            });
+            await persistSession(res.data.user);
+            return res.data.user;
+        } catch (err) {
+            console.log('Profile refresh failed:', err?.response?.data || err.message);
+            return null;
+        }
+    };
+
+    const updateProfile = async (payload) => {
+        try {
+            const res = await axios.put(`${API_BASE}/api/auth/me`, payload, {
+                headers: { 'x-auth-token': token }
+            });
+            await persistSession(res.data.user);
+            return { success: true, user: res.data.user };
+        } catch (err) {
+            return {
+                success: false,
+                msg: err.response?.data?.msg || 'Profile update failed'
+            };
         }
     };
 
@@ -79,7 +114,9 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+        <AuthContext.Provider
+            value={{ user, token, loading, login, register, logout, refreshProfile, updateProfile }}
+        >
             {children}
         </AuthContext.Provider>
     );

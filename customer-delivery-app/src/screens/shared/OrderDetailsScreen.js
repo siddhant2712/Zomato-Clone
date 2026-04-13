@@ -1,7 +1,25 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
-import { ChevronLeft, Package, MapPin, Clock, CheckCircle2, Truck, Flame, Bike, Phone } from 'lucide-react-native';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    TouchableOpacity,
+    ActivityIndicator,
+    Alert,
+} from 'react-native';
+import {
+    ChevronLeft,
+    Package,
+    MapPin,
+    Clock,
+    CheckCircle2,
+    Flame,
+    Bike,
+    Phone,
+} from 'lucide-react-native';
 import axios from 'axios';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import ENV from '../../config/env';
 import { AuthContext } from '../../context/AuthContext';
 
@@ -9,14 +27,14 @@ const MIRCHI_RED = '#BC1010';
 const MIRCHI_GREEN = '#00B14F';
 
 export default function OrderDetailsScreen({ route, navigation }) {
-    const { token } = useContext(AuthContext);
+    const { token, user } = useContext(AuthContext);
     const [order, setOrder] = useState(route.params.order);
     const [loading, setLoading] = useState(false);
 
     const fetchOrderUpdate = async () => {
         try {
             const res = await axios.get(`${ENV.API_BASE}/api/orders/${order._id}`, {
-                headers: { 'x-auth-token': token }
+                headers: { 'x-auth-token': token },
             });
             setOrder(res.data);
         } catch (err) {
@@ -45,6 +63,8 @@ export default function OrderDetailsScreen({ route, navigation }) {
                 return { label: 'Out for Delivery', color: MIRCHI_GREEN, icon: Bike, sub: 'Partner is on the way' };
             case 'delivered':
                 return { label: 'Delivered', color: MIRCHI_GREEN, icon: CheckCircle2, sub: 'Enjoy your meal!' };
+            case 'cancelled':
+                return { label: 'Cancelled', color: '#B00020', icon: CheckCircle2, sub: 'This order was cancelled' };
             default:
                 return { label: status, color: '#888', icon: Package, sub: '' };
         }
@@ -52,12 +72,40 @@ export default function OrderDetailsScreen({ route, navigation }) {
 
     const statusInfo = getStatusInfo(order.status);
     const StatusIcon = statusInfo.icon;
+    const canCancelOrder =
+        user?.role === 'customer' && ['pending', 'accepted'].includes(order.status);
 
-    // Helper for stepper
-    const isStepReached = (statuses) => statuses.includes(order.status);
     const isStepPassed = (targetOrder) => {
         const flow = ['pending', 'accepted', 'preparing', 'ready', 'assigned', 'picked', 'delivered'];
         return flow.indexOf(order.status) >= flow.indexOf(targetOrder);
+    };
+
+    const handleCancelOrder = () => {
+        Alert.alert('Cancel order', 'Do you want to cancel this order?', [
+            { text: 'Keep Order', style: 'cancel' },
+            {
+                text: 'Cancel Order',
+                style: 'destructive',
+                onPress: async () => {
+                    try {
+                        setLoading(true);
+                        const res = await axios.patch(
+                            `${ENV.API_BASE}/api/orders/${order._id}/cancel`,
+                            {},
+                            { headers: { 'x-auth-token': token } }
+                        );
+                        setOrder(res.data);
+                    } catch (err) {
+                        Alert.alert(
+                            'Unable to cancel',
+                            err.response?.data?.msg || 'This order can no longer be cancelled.'
+                        );
+                    } finally {
+                        setLoading(false);
+                    }
+                },
+            },
+        ]);
     };
 
     return (
@@ -71,8 +119,6 @@ export default function OrderDetailsScreen({ route, navigation }) {
             </View>
 
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-                
-                {/* Main Status Hero */}
                 <View style={[styles.statusCard, { backgroundColor: `${statusInfo.color}15` }]}>
                     <StatusIcon color={statusInfo.color} size={40} />
                     <View style={styles.statusInfo}>
@@ -84,11 +130,8 @@ export default function OrderDetailsScreen({ route, navigation }) {
                     </View>
                 </View>
 
-                {/* Vertical Stepper */}
-                <View style={styles.trackingCard}>
-                    <View style={styles.stepperContainer}>
-                        
-                        {/* Step 1: Confirmed */}
+                {order.status !== 'cancelled' && (
+                    <View style={styles.trackingCard}>
                         <View style={styles.stepRow}>
                             <View style={styles.stepLeft}>
                                 <View style={[styles.stepDot, isStepPassed('accepted') && styles.stepDotActive]} />
@@ -96,11 +139,8 @@ export default function OrderDetailsScreen({ route, navigation }) {
                             </View>
                             <View style={styles.stepRight}>
                                 <Text style={[styles.stepTitle, isStepPassed('accepted') && styles.stepTitleActive]}>Order Confirmed</Text>
-                                <Text style={styles.stepTime}>Just now</Text>
                             </View>
                         </View>
-
-                        {/* Step 2: Preparing */}
                         <View style={styles.stepRow}>
                             <View style={styles.stepLeft}>
                                 <View style={[styles.stepDot, isStepPassed('preparing') && styles.stepDotActive]} />
@@ -111,8 +151,6 @@ export default function OrderDetailsScreen({ route, navigation }) {
                                 <Text style={styles.stepSub}>Chef is cooking your meal</Text>
                             </View>
                         </View>
-
-                        {/* Step 3: Ready */}
                         <View style={styles.stepRow}>
                             <View style={styles.stepLeft}>
                                 <View style={[styles.stepDot, isStepPassed('ready') && styles.stepDotActive]} />
@@ -123,8 +161,6 @@ export default function OrderDetailsScreen({ route, navigation }) {
                                 <Text style={styles.stepSub}>Waiting for delivery partner</Text>
                             </View>
                         </View>
-
-                        {/* Step 4: Assigned */}
                         <View style={styles.stepRow}>
                             <View style={styles.stepLeft}>
                                 <View style={[styles.stepDot, isStepPassed('assigned') && styles.stepDotActive]} />
@@ -135,8 +171,6 @@ export default function OrderDetailsScreen({ route, navigation }) {
                                 <Text style={styles.stepSub}>Rider is picking up your order</Text>
                             </View>
                         </View>
-
-                        {/* Step 5: Picked Up */}
                         <View style={styles.stepRow}>
                             <View style={styles.stepLeft}>
                                 <View style={[styles.stepDot, isStepPassed('picked') && styles.stepDotActive]} />
@@ -147,8 +181,6 @@ export default function OrderDetailsScreen({ route, navigation }) {
                                 <Text style={styles.stepSub}>Partner is headed to you</Text>
                             </View>
                         </View>
-
-                        {/* Step 5: Delivered */}
                         <View style={styles.stepRow}>
                             <View style={styles.stepLeft}>
                                 <View style={[styles.stepDot, isStepPassed('delivered') && styles.stepDotActive]} />
@@ -157,19 +189,21 @@ export default function OrderDetailsScreen({ route, navigation }) {
                                 <Text style={[styles.stepTitle, isStepPassed('delivered') && styles.stepTitleActive]}>Delivered</Text>
                             </View>
                         </View>
-
                     </View>
-                </View>
+                )}
 
-                {/* Driver Info Card - Shows only when picked */}
                 {order.deliveryId && (
                     <View style={styles.driverCard}>
                         <View style={styles.driverPhotoCircle}>
                             <Bike size={24} color="#666" />
                         </View>
                         <View style={styles.driverDetails}>
-                            <Text style={styles.driverName}>{order.deliveryId?.name || 'Mirchi Delivery Partner'}</Text>
-                            <Text style={styles.driverRating}>Verified Partner ★ 4.8</Text>
+                            <Text style={styles.driverName}>
+                                {order.deliveryId?.name || 'Mirchi Delivery Partner'}
+                            </Text>
+                            <Text style={styles.driverRating}>
+                                Verified Partner - {order.deliveryId?.phone || 'Phone available'}
+                            </Text>
                         </View>
                         <TouchableOpacity style={styles.callBtn}>
                             <Phone size={20} color={MIRCHI_GREEN} fill={MIRCHI_GREEN} />
@@ -177,28 +211,49 @@ export default function OrderDetailsScreen({ route, navigation }) {
                     </View>
                 )}
 
-                {/* Summary Section */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Order Items</Text>
                     {order.items.map((item, idx) => (
                         <View key={idx} style={styles.itemRow}>
                             <Text style={styles.itemQty}>{item.quantity}x</Text>
                             <Text style={styles.itemName}>{item.name}</Text>
-                            <Text style={styles.itemPrice}>₹{item.price * item.quantity}</Text>
+                            <Text style={styles.itemPrice}>Rs. {item.price * item.quantity}</Text>
                         </View>
                     ))}
                     <View style={styles.totalRow}>
                         <Text style={styles.totalLabel}>Grand Total</Text>
-                        <Text style={styles.totalValue}>₹{order.totalAmount}</Text>
+                        <Text style={styles.totalValue}>Rs. {order.totalAmount}</Text>
+                    </View>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Delivery Location</Text>
+                    <View style={styles.infoRow}>
+                        <MapPin size={20} color="#666" />
+                        <Text style={styles.infoText}>{order.deliveryAddress || 'Address unavailable'}</Text>
                     </View>
                 </View>
 
                 <View style={[styles.section, { marginBottom: 40 }]}>
-                    <Text style={styles.sectionTitle}>Delivery Location</Text>
-                    <View style={styles.infoRow}>
-                        <MapPin size={20} color="#666" />
-                        <Text style={styles.infoText}>123 Mirchi Lane, Industrial Area, Ballia</Text>
-                    </View>
+                    <Text style={styles.sectionTitle}>Order Details</Text>
+                    <Text style={styles.detailText}>
+                        Payment: {order.paymentMethod === 'online' ? 'Pay Online' : 'Cash on Delivery'}
+                    </Text>
+                    <Text style={styles.detailText}>
+                        Phone: {order.customerPhone || user?.phone || 'Not provided'}
+                    </Text>
+                    <Text style={styles.detailText}>
+                        Notes: {order.specialInstructions || 'No special instructions'}
+                    </Text>
+                    {canCancelOrder && (
+                        <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelOrder} disabled={loading}>
+                            {loading ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <Text style={styles.cancelBtnText}>Cancel This Order</Text>
+                            )}
+                        </TouchableOpacity>
+                    )}
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -213,10 +268,13 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         padding: 20,
     },
-    backBtn: { 
+    backBtn: {
         backgroundColor: '#F5F5F5',
-        width: 40, height: 40, borderRadius: 20,
-        alignItems: 'center', justifyContent: 'center'
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     headerTitle: { fontSize: 18, fontWeight: '800', color: '#111' },
     content: { padding: 15 },
@@ -227,59 +285,40 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         marginBottom: 20,
     },
-    statusInfo: { marginLeft: 20 },
+    statusInfo: { marginLeft: 20, flex: 1 },
     statusLabel: { fontSize: 22, fontWeight: '900' },
     statusSubText: { fontSize: 13, color: '#555', marginTop: 2, fontWeight: '600' },
     orderId: { fontSize: 11, color: '#777', marginTop: 6, fontWeight: '700' },
-    
-    trackingCard: { 
-        backgroundColor: '#FAFAFA', 
-        padding: 25, 
-        borderRadius: 24, 
+    trackingCard: {
+        backgroundColor: '#FAFAFA',
+        padding: 25,
+        borderRadius: 24,
         marginBottom: 20,
         borderWidth: 1,
-        borderColor: '#F0F0F0'
+        borderColor: '#F0F0F0',
     },
-    stepperContainer: {
-        marginLeft: 5,
-    },
-    stepRow: {
-        flexDirection: 'row',
-        minHeight: 60,
-    },
-    stepLeft: {
-        alignItems: 'center',
-        width: 30,
-    },
+    stepRow: { flexDirection: 'row', minHeight: 60 },
+    stepLeft: { alignItems: 'center', width: 30 },
     stepDot: {
-        width: 14, height: 14, borderRadius: 7, 
+        width: 14,
+        height: 14,
+        borderRadius: 7,
         backgroundColor: '#DDD',
-        borderWidth: 3, borderColor: '#FAFAFA'
+        borderWidth: 3,
+        borderColor: '#FAFAFA',
     },
-    stepDotActive: {
-        backgroundColor: MIRCHI_GREEN,
-    },
+    stepDotActive: { backgroundColor: MIRCHI_GREEN },
     stepLine: {
-        width: 2, flex: 1, 
+        width: 2,
+        flex: 1,
         backgroundColor: '#EEE',
         marginVertical: 4,
     },
-    stepLineActive: {
-        backgroundColor: MIRCHI_GREEN,
-    },
-    stepRight: {
-        marginLeft: 15,
-        paddingBottom: 25,
-    },
-    stepTitle: {
-        fontSize: 15, fontWeight: '700', color: '#AAA'
-    },
-    stepTitleActive: {
-        color: '#111'
-    },
-    stepTime: { fontSize: 12, color: '#AAA', marginTop: 2 },
+    stepLineActive: { backgroundColor: MIRCHI_GREEN },
+    stepRight: { marginLeft: 15, paddingBottom: 25 },
+    stepTitle: { fontSize: 15, fontWeight: '700', color: '#AAA' },
+    stepTitleActive: { color: '#111' },
     stepSub: { fontSize: 12, color: '#888', marginTop: 2 },
-
     driverCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -289,19 +328,24 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     driverPhotoCircle: {
-        width: 50, height: 50, borderRadius: 25, backgroundColor: '#FFF',
-        alignItems: 'center', justifyContent: 'center'
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: '#FFF',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    driverDetails: {
-        flex: 1, marginLeft: 15,
-    },
+    driverDetails: { flex: 1, marginLeft: 15 },
     driverName: { color: '#FFF', fontSize: 16, fontWeight: '800' },
     driverRating: { color: '#AAA', fontSize: 11, marginTop: 2 },
     callBtn: {
-        width: 45, height: 45, borderRadius: 22, backgroundColor: 'rgba(0, 177, 79, 0.15)',
-        alignItems: 'center', justifyContent: 'center'
+        width: 45,
+        height: 45,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0, 177, 79, 0.15)',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-
     section: { marginBottom: 30, paddingHorizontal: 10 },
     sectionTitle: { fontSize: 17, fontWeight: '800', color: '#111', marginBottom: 15 },
     itemRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
@@ -320,4 +364,13 @@ const styles = StyleSheet.create({
     totalValue: { fontSize: 20, fontWeight: '900', color: MIRCHI_GREEN },
     infoRow: { flexDirection: 'row', alignItems: 'center' },
     infoText: { marginLeft: 15, color: '#666', flex: 1, fontSize: 14, fontWeight: '500' },
+    detailText: { color: '#555', fontSize: 14, marginBottom: 8 },
+    cancelBtn: {
+        marginTop: 16,
+        backgroundColor: '#B00020',
+        borderRadius: 14,
+        alignItems: 'center',
+        paddingVertical: 14,
+    },
+    cancelBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

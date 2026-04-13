@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Menu = require('./models/Menu');
 const User = require('./models/User');
+const Restaurant = require('./models/Restaurant');
 require('dotenv').config();
 
 const items = [
@@ -45,32 +46,69 @@ async function seed() {
         await mongoose.connect(process.env.MONGO_URI);
         console.log("Connected to MongoDB!");
 
-        // Assuming there is at least one restaurant user
-        const restaurantUser = await User.findOne({ role: 'restaurant' });
-        if (!restaurantUser) {
-            console.log("No restaurant user found. Run the app and sign up as a restaurant first.");
-            process.exit(1);
+        // 1. Create or Find Restaurant Admin
+        let adminUser = await User.findOne({ email: 'admin@mirchi.com' });
+        if (!adminUser) {
+            console.log("Creating default admin user...");
+            adminUser = new User({
+                name: 'Mirchi Admin',
+                email: 'admin@mirchi.com',
+                password: 'password123',
+                role: 'restaurant'
+            });
+            await adminUser.save();
         }
 
-        const restaurantId = restaurantUser._id;
+        // 2. Create or Find Restaurant Entity
+        let restaurant = await Restaurant.findOne({ ownerId: adminUser._id });
+        if (!restaurant) {
+            console.log("Creating Mirchi Restaurant entity...");
+            restaurant = new Restaurant({
+                name: "Mirchi - Pure Veg Delights",
+                ownerId: adminUser._id,
+                location: { address: "Mirchi Lane, Mumbai", latitude: 19.076, longitude: 72.877 }
+            });
+            await restaurant.save();
+            adminUser.managedRestaurantId = restaurant._id;
+            await adminUser.save();
+        }
 
-        // Clear existing menu for this restaurant if needed, or simply append
-        // Let's just append for safety, or clear it to avoid massive duplicates if run multiple times
+        // 3. Create a Test Customer
+        let testCustomer = await User.findOne({ email: 'test@customer.com' });
+        if (!testCustomer) {
+            console.log("Creating test customer user...");
+            testCustomer = new User({
+                name: 'Test Customer',
+                email: 'test@customer.com',
+                password: 'password123',
+                role: 'customer'
+            });
+            await testCustomer.save();
+        }
+
+        const restaurantId = restaurant._id;
+
+        // 4. Clear and Seed Menu Items
         await Menu.deleteMany({ restaurantId });
 
         const mappedItems = items.map(item => ({
             ...item,
             restaurantId,
-            image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400", // Default generic food image
+            image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400",
             isAvailable: true
         }));
 
         await Menu.insertMany(mappedItems);
-        console.log(`Successfully added ${mappedItems.length} items to the Mirchi menu for ${restaurantUser.name}!`);
+        console.log(`Successfully added ${mappedItems.length} items to the menu!`);
+        console.log("--------------------------------------------------");
+        console.log("CREDENTIALS FOR TESTING:");
+        console.log("ADMIN (Restaurant App): admin@mirchi.com / password123");
+        console.log("CUSTOMER (Customer App): test@customer.com / password123");
+        console.log("--------------------------------------------------");
 
         process.exit(0);
     } catch (err) {
-        console.error(err);
+        console.error("Seeding error:", err);
         process.exit(1);
     }
 }

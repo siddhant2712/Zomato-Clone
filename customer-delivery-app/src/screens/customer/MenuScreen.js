@@ -10,9 +10,10 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import { ChevronLeft, ShoppingBag } from 'lucide-react-native';
+import { ChevronLeft, ShoppingBag, Search } from 'lucide-react-native';
 import { AuthContext } from '../../context/AuthContext';
 import { CartContext } from '../../context/CartContext';
+import { useMemo } from 'react';
 import axios from 'axios';
 import ENV from '../../config/env';
 
@@ -26,13 +27,23 @@ export default function MenuScreen({ route, navigation }) {
 
     const [menuItems, setMenuItems] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+
+    const filteredItems = useMemo(() => {
+        const query = search.toLowerCase().trim();
+        return menuItems.filter(item => 
+            !query || 
+            item.name?.toLowerCase().includes(query) || 
+            item.description?.toLowerCase().includes(query)
+        );
+    }, [menuItems, search]);
 
     useEffect(() => {
         const fetchMenu = async () => {
             try {
                 const res = await axios.get(`${ENV.API_BASE}/api/menu`, {
                     headers: { 'x-auth-token': token },
-                    params: { availableOnly: true },
+                    params: { availableOnly: true, category: category },
                 });
                 setMenuItems(res.data);
             } catch (err) {
@@ -43,11 +54,7 @@ export default function MenuScreen({ route, navigation }) {
         };
 
         fetchMenu();
-    }, [token]);
-
-    const filteredItems = menuItems.filter(
-        (item) => item.category === category && item.isAvailable !== false
-    );
+    }, [token, category]);
 
     const getQuantity = (itemId) => {
         const item = cart.find((cartItem) => cartItem._id === itemId);
@@ -78,12 +85,25 @@ export default function MenuScreen({ route, navigation }) {
                 </TouchableOpacity>
             </View>
 
+            <View style={styles.searchContainer}>
+                <View style={styles.searchBar}>
+                    <Search color="#999" size={18} />
+                    <TextInput 
+                        placeholder={`Search in ${category}...`}
+                        value={search}
+                        onChangeText={setSearch}
+                        style={styles.searchInput}
+                        placeholderTextColor="#999"
+                    />
+                </View>
+            </View>
+
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {loading ? (
                     <ActivityIndicator color={MIRCHI_RED} size="large" style={styles.loader} />
                 ) : filteredItems.length === 0 ? (
                     <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyText}>No dishes available in this category yet.</Text>
+                        <Text style={styles.emptyText}>No dishes match your search.</Text>
                     </View>
                 ) : (
                     filteredItems.map((item) => (
@@ -157,6 +177,24 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
     },
     headerTitle: { fontSize: 20, fontWeight: '700', color: '#333' },
+    searchContainer: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 20,
+        paddingBottom: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    searchBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F7F7F7',
+        paddingHorizontal: 15,
+        height: 48,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#EAEAEA',
+    },
+    searchInput: { flex: 1, marginLeft: 10, fontSize: 14, color: '#333' },
     cartBtn: { position: 'relative' },
     badge: {
         position: 'absolute',
