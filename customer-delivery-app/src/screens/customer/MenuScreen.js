@@ -10,9 +10,10 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import { ChevronLeft, ShoppingBag } from 'lucide-react-native';
+import { ChevronLeft, ShoppingBag, Search } from 'lucide-react-native';
 import { AuthContext } from '../../context/AuthContext';
 import { CartContext } from '../../context/CartContext';
+import { useMemo } from 'react';
 import axios from 'axios';
 import ENV from '../../config/env';
 
@@ -26,6 +27,16 @@ export default function MenuScreen({ route, navigation }) {
 
     const [menuItems, setMenuItems] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+
+    const filteredItems = useMemo(() => {
+        const query = search.toLowerCase().trim();
+        return menuItems.filter(item => 
+            !query || 
+            item.name?.toLowerCase().includes(query) || 
+            item.description?.toLowerCase().includes(query)
+        );
+    }, [menuItems, search]);
 
     useEffect(() => {
         const fetchMenu = async () => {
@@ -74,15 +85,28 @@ export default function MenuScreen({ route, navigation }) {
                 </TouchableOpacity>
             </View>
 
+            <View style={styles.searchContainer}>
+                <View style={styles.searchBar}>
+                    <Search color="#999" size={18} />
+                    <TextInput 
+                        placeholder={`Search in ${category}...`}
+                        value={search}
+                        onChangeText={setSearch}
+                        style={styles.searchInput}
+                        placeholderTextColor="#999"
+                    />
+                </View>
+            </View>
+
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {loading ? (
                     <ActivityIndicator color={MIRCHI_RED} size="large" style={styles.loader} />
-                ) : menuItems.length === 0 ? (
+                ) : filteredItems.length === 0 ? (
                     <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyText}>No dishes available in this category yet.</Text>
+                        <Text style={styles.emptyText}>No dishes match your search.</Text>
                     </View>
                 ) : (
-                    menuItems.map((item) => (
+                    filteredItems.map((item) => (
                         <View key={item._id} style={styles.itemCard}>
                             <Image
                                 source={{ uri: item.image || FALLBACK_IMAGE }}
@@ -153,6 +177,24 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
     },
     headerTitle: { fontSize: 20, fontWeight: '700', color: '#333' },
+    searchContainer: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 20,
+        paddingBottom: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
+    },
+    searchBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F7F7F7',
+        paddingHorizontal: 15,
+        height: 48,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#EAEAEA',
+    },
+    searchInput: { flex: 1, marginLeft: 10, fontSize: 14, color: '#333' },
     cartBtn: { position: 'relative' },
     badge: {
         position: 'absolute',
