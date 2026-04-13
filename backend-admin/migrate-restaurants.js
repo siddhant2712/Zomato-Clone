@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const User = require('./models/User');
 const Restaurant = require('./models/Restaurant');
-const Order = require('./models/Order');
 const Menu = require('./models/Menu');
 require('dotenv').config();
 
@@ -36,12 +35,6 @@ const migrate = async () => {
                 );
                 console.log(`- Updated ${menuResult.modifiedCount} menu items.`);
 
-                // 4. Update Orders
-                const orderResult = await Order.updateMany(
-                    { restaurantId: user._id },
-                    { $set: { restaurantId: newRestaurant._id } }
-                );
-                console.log(`- Updated ${orderResult.modifiedCount} orders.`);
             } else {
                 console.log(`User ${user.name} already has a managed restaurant.`);
             }
