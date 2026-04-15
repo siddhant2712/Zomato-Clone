@@ -12,6 +12,7 @@ app.use(cors());
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/menu', require('./routes/menu'));
+app.use('/api/cart', require('./routes/cart'));
 app.use('/api/orders', require('./routes/orders'));
 
 // DB Connection
